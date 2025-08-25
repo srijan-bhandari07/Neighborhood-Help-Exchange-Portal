@@ -122,6 +122,9 @@ const offerHelp = async (req, res) => {
 // Accept Help Offer
 const acceptHelpOffer = async (req, res) => {
   try {
+    console.log('User making request:', req.user); // Debug log
+    console.log('Params:', req.params); // Debug log
+
     const { id, helperId } = req.params;
 
     const helpPost = await HelpPost.findById(id);
@@ -134,7 +137,7 @@ const acceptHelpOffer = async (req, res) => {
       return res.status(403).json({ message: 'Not authorized to accept help offers' });
     }
 
-    // Find and update the helper status
+    // Find and update the helper 
     const helper = helpPost.helpers.id(helperId);
     if (!helper) {
       return res.status(404).json({ message: 'Helper not found' });

@@ -38,6 +38,31 @@ const TaskList = () => {
     }
   };
 
+  const handleAcceptHelp = async (postId, helperId) => {
+  try {
+    const res = await axios.put(`/api/help/${postId}/helpers/${helperId}/accept`);
+    setPosts(prev =>
+      prev.map(p => (p._id === postId ? res.data : p))
+    );
+  } catch (err) {
+    console.error('Error accepting help:', err);
+    alert(err.response?.data?.message || 'Failed to accept help');
+  }
+};
+
+const handleRejectHelp = async (postId, helperId) => {
+  try {
+    const res = await axios.put(`/api/help/${postId}/helpers/${helperId}/reject`);
+    setPosts(prev =>
+      prev.map(p => (p._id === postId ? res.data : p))
+    );
+  } catch (err) {
+    console.error('Error rejecting help:', err);
+    alert(err.response?.data?.message || 'Failed to reject help');
+  }
+};
+
+
   const handleDeletePost = async (postId) => {
     try {
       await axios.delete(`/api/help/${postId}`);
@@ -49,19 +74,21 @@ const TaskList = () => {
   };
 
   const handleUpdatePost = async (postId, updatedData) => {
-    try {
-      const response = await axios.put(`/api/help/${postId}`, updatedData);
-      setPosts(posts.map(post => post._id === postId ? response.data : post));
-      setEditingPost(null);
-      return { success: true };
-    } catch (error) {
-      console.error('Error updating post:', error);
-      return { 
-        success: false, 
-        message: error.response?.data?.message || 'Failed to update post' 
-      };
-    }
-  };
+    if (!editingPost) return { success: false, message: 'No post being edited' };
+  
+  try {
+    const response = await axios.put(`/api/help/${editingPost._id}`, updatedData);
+    setPosts(posts.map(post => post._id === editingPost._id ? response.data : post));
+    setEditingPost(null);
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating post:', error);
+    return { 
+      success: false, 
+      message: error.response?.data?.message || 'Failed to update post' 
+    };
+  }
+};
 
   if (loading) {
     return (
@@ -90,6 +117,7 @@ const TaskList = () => {
         <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
           <h3 className="text-lg font-semibold mb-4">Edit Post</h3>
           <HelpPostForm 
+            key={editingPost._id}
             post={editingPost}
             onSubmit={handleUpdatePost}
             onCancel={() => setEditingPost(null)}
@@ -143,6 +171,8 @@ const TaskList = () => {
                 onUpdateStatus={handleUpdateStatus}
                 onDelete={handleDeletePost}
                 onEdit={() => setEditingPost(post)}
+                onAcceptHelp={handleAcceptHelp} 
+                onRejectHelp={handleRejectHelp} 
                 showActions={true}
                 isAuthor={true}
               />

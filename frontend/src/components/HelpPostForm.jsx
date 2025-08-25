@@ -1,34 +1,62 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-const HelpPostForm = () => {
+const HelpPostForm = ({ 
+  post = null,
+  onSubmit, 
+  onCancel 
+}) => {
+  // Initialize formData based on post prop
   const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    category: '',
-    location: '',
-    neededBy: ''
+    title: post?.title || '',
+    description: post?.description || '',
+    category: post?.category || '',
+    location: post?.location || '',
+    neededBy: post?.neededBy ? formatDateForInput(post.neededBy) : ''
   });
+  
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
   const categories = [
-    'Shopping',
-    'Transport',
-    'Study Help',
-    'Food Delivery',
-    'Ride Share',
-    'Book Exchange',
-    'Project Help',
-    'Other'
+    'Shopping', 'Transport', 'Study Help', 'Food Delivery', 
+    'Ride Share', 'Book Exchange', 'Project Help', 'Other'
   ];
 
+  // Helper function to format date for datetime-local input
+  function formatDateForInput(dateString) {
+    const date = new Date(dateString);
+    return date.toISOString().slice(0, 16);
+  }
+
+  // Update formData when post changes
+  useEffect(() => {
+    if (post) {
+      setFormData({
+        title: post.title || '',
+        description: post.description || '',
+        category: post.category || '',
+        location: post.location || '',
+        neededBy: post.neededBy ? formatDateForInput(post.neededBy) : ''
+      });
+    } else {
+      setFormData({
+        title: '',
+        description: '',
+        category: '',
+        location: '',
+        neededBy: ''
+      });
+    }
+  }, [post]);
+
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
   const handleSubmit = async (e) => {
@@ -38,24 +66,37 @@ const HelpPostForm = () => {
     setLoading(true);
 
     try {
-      await axios.post('/api/help', formData);
-      setSuccess('Help request created successfully!');
-      setFormData({
-        title: '',
-        description: '',
-        category: '',
-        location: '',
-        neededBy: ''
-      });
+      if (post) {
+        // Edit mode
+        const result = await onSubmit(formData);
+        if (result?.success) {
+          setSuccess('Help request updated successfully!');
+          setTimeout(() => setSuccess(''), 2000);
+        } else {
+          setError(result?.message || 'Failed to update help request');
+        }
+      } else {
+        // Create mode
+        await axios.post('/api/help', formData);
+        setSuccess('Help request created successfully!');
+        setFormData({
+          title: '',
+          description: '',
+          category: '',
+          location: '',
+          neededBy: ''
+        });
+        setTimeout(() => setSuccess(''), 2000);
+      }
     } catch (error) {
-      console.error('Error creating post:', error);
-      setError(error.response?.data?.message || 'Failed to create help request');
+      console.error('Error:', error);
+      setError(error.response?.data?.message || 
+        (post ? 'Failed to update help request' : 'Failed to create help request'));
     } finally {
       setLoading(false);
     }
   };
 
-  // Get minimum date for neededBy (current date + 1 hour)
   const getMinDateTime = () => {
     const now = new Date();
     now.setHours(now.getHours() + 1);
@@ -66,14 +107,16 @@ const HelpPostForm = () => {
     <div className="max-w-2xl mx-auto">
       <div className="bg-white shadow-sm rounded-lg border">
         <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">Create Help Request</h2>
+          <h2 className="text-xl font-semibold text-gray-900">
+            {post ? 'Edit Help Request' : 'Create Help Request'}
+          </h2>
           <p className="text-sm text-gray-600 mt-1">
-            Let your community know what kind of help you need
+            {post ? 'Update your help request details' : 'Let your community know what kind of help you need'}
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Title */}
+          {/* Form fields remain the same as before */}
           <div>
             <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
               Title *
@@ -90,7 +133,6 @@ const HelpPostForm = () => {
             />
           </div>
 
-          {/* Category */}
           <div>
             <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-2">
               Category *
@@ -112,7 +154,6 @@ const HelpPostForm = () => {
             </select>
           </div>
 
-          {/* Description */}
           <div>
             <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
               Description *
@@ -129,7 +170,6 @@ const HelpPostForm = () => {
             />
           </div>
 
-          {/* Location */}
           <div>
             <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-2">
               Location *
@@ -146,7 +186,6 @@ const HelpPostForm = () => {
             />
           </div>
 
-          {/* Needed By */}
           <div>
             <label htmlFor="neededBy" className="block text-sm font-medium text-gray-700 mb-2">
               Needed By *
@@ -166,7 +205,6 @@ const HelpPostForm = () => {
             </p>
           </div>
 
-          {/* Error/Success Messages */}
           {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
               {error}
@@ -179,14 +217,25 @@ const HelpPostForm = () => {
             </div>
           )}
 
-          {/* Submit Button */}
-          <div className="flex justify-end">
+          <div className="flex justify-end space-x-3">
+            {onCancel && (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="bg-gray-300 hover:bg-gray-400 text-gray-700 py-2 px-6 rounded-md font-medium transition-colors"
+              >
+                Cancel
+              </button>
+            )}
             <button
               type="submit"
               disabled={loading}
               className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-6 rounded-md font-medium transition-colors disabled:opacity-50"
             >
-              {loading ? 'Creating...' : 'Create Help Request'}
+              {loading 
+                ? (post ? 'Updating...' : 'Creating...') 
+                : (post ? 'Update Help Request' : 'Create Help Request')
+              }
             </button>
           </div>
         </form>

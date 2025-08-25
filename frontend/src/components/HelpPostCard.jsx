@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 
-const HelpPostCard = ({ 
-  post, 
-  onOfferHelp, 
-  onAcceptHelp, 
-  onRejectHelp, 
-  onUpdateStatus, 
-  onDelete, 
-  onEdit,
+const HelpPostCard = ({
+  post,
+  onOfferHelp = async () => {},
+  onAcceptHelp = async () => {},
+  onRejectHelp = async () => {},
+  onUpdateStatus = async () => {},
+  onDelete = () => {},
+  onEdit = () => {},
   showActions = false,
   isAuthor = false
 }) => {
@@ -16,18 +16,33 @@ const HelpPostCard = ({
   const [showOfferForm, setShowOfferForm] = useState(false);
   const [offerMessage, setOfferMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [actioningHelperId, setActioningHelperId] = useState(null);
   const { user } = useAuth();
 
   if (!post) return null;
 
-  const author = post.author || {};
-  const helpers = post.helpers || [];
+  // ---- compute first (before any JSX uses them) ----
+  const author  = post.author || {};
+  const helpers = Array.isArray(post.helpers) ? post.helpers : [];
+
+  // normalize current user id to handle either user._id or user.id from auth
+  const currentUserId = String(user?._id || user?.id || '');
+
+  const isUserAuthor = Boolean(currentUserId && String(author?._id) === currentUserId);
+
+  const hasOfferedHelp = Boolean(
+    currentUserId && helpers.some(h => String(h.user?._id) === currentUserId)
+  );
+
+  const canOfferHelp =
+    showActions && user && !(isAuthor || isUserAuthor) && !hasOfferedHelp && post.status === 'open';
+  // --------------------------------------------------
 
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
@@ -45,14 +60,14 @@ const HelpPostCard = ({
 
   const getCategoryColor = (category) => {
     const colors = {
-      'Shopping': 'bg-blue-100 text-blue-800',
-      'Transport': 'bg-purple-100 text-purple-800',
+      Shopping: 'bg-blue-100 text-blue-800',
+      Transport: 'bg-purple-100 text-purple-800',
       'Study Help': 'bg-indigo-100 text-indigo-800',
       'Food Delivery': 'bg-orange-100 text-orange-800',
       'Ride Share': 'bg-green-100 text-green-800',
       'Book Exchange': 'bg-pink-100 text-pink-800',
       'Project Help': 'bg-red-100 text-red-800',
-      'Other': 'bg-gray-100 text-gray-800'
+      Other: 'bg-gray-100 text-gray-800'
     };
     return colors[category] || 'bg-gray-100 text-gray-800';
   };
@@ -75,18 +90,14 @@ const HelpPostCard = ({
     }
   };
 
-  const isUserAuthor = user && author._id && user.id === author._id.toString();
-  const hasOfferedHelp = user && helpers.some(helper => 
-    helper.user && helper.user._id && helper.user._id.toString() === user.id
-  );
-  const canOfferHelp = showActions && user && !isUserAuthor && !hasOfferedHelp && post.status === 'open';
-
   return (
     <div className="bg-white rounded-lg shadow-sm border hover:shadow-md transition-shadow">
       <div className="p-6">
         <div className="flex justify-between items-start mb-4">
           <div className="flex-1">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">{post.title || 'Untitled Post'}</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              {post.title || 'Untitled Post'}
+            </h3>
             <div className="flex flex-wrap gap-2 mb-3">
               <span className={`px-2 py-1 rounded-full text-xs font-medium ${getCategoryColor(post.category)}`}>
                 {post.category || 'Other'}
@@ -139,39 +150,60 @@ const HelpPostCard = ({
           {showHelpers && helpers.length > 0 && (
             <div className="mt-3 space-y-2">
               {helpers.map((helper, index) => (
-                <div key={index} className="bg-gray-50 p-3 rounded-md">
+                <div
+                  key={helper._id || helper.user?._id || index}
+                  className="bg-gray-50 p-3 rounded-md"
+                >
                   <div className="flex justify-between items-start">
                     <div>
                       <span className="font-medium text-sm text-gray-900">
-                        {helper.user?.username || 'Anonymous'} 
+                        {helper.user?.username || 'Anonymous'}
                         {helper.user?.studentId && ` (${helper.user.studentId})`}
                       </span>
                       <div className="text-xs text-gray-500">
                         Offered help on {formatDate(helper.offeredAt)}
                         {helper.status !== 'pending' && (
-                          <span className={`ml-2 px-2 py-1 rounded-full text-xs ${helper.status === 'accepted' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                          <span
+                            className={`ml-2 px-2 py-1 rounded-full text-xs ${
+                              helper.status === 'accepted'
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}
+                          >
                             {helper.status}
                           </span>
                         )}
                       </div>
                     </div>
                   </div>
+
                   {helper.message && (
                     <p className="text-sm text-gray-600 mt-2">{helper.message}</p>
                   )}
-                  {isUserAuthor && helper.status === 'pending' && (
+
+                  {(isUserAuthor || isUserAuthor) && helper.status === 'pending' && (
                     <div className="flex space-x-2 mt-2">
                       <button
-                        onClick={() => onAcceptHelp(post._id, helper._id)}
-                        className="bg-green-500 hover:bg-green-600 text-white py-1 px-3 rounded-md text-sm transition-colors"
+                        onClick={async () => {
+                          setActioningHelperId(helper._id);
+                          await onAcceptHelp(post._id, helper._id);
+                          setActioningHelperId(null);
+                        }}
+                        disabled={actioningHelperId === helper._id}
+                        className="bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white py-1 px-3 rounded-md text-sm transition-colors"
                       >
-                        Accept
+                        {actioningHelperId === helper._id ? 'Accepting…' : 'Accept'}
                       </button>
                       <button
-                        onClick={() => onRejectHelp(post._id, helper._id)}
-                        className="bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded-md text-sm transition-colors"
+                        onClick={async () => {
+                          setActioningHelperId(helper._id);
+                          await onRejectHelp(post._id, helper._id);
+                          setActioningHelperId(null);
+                        }}
+                        disabled={actioningHelperId === helper._id}
+                        className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white py-1 px-3 rounded-md text-sm transition-colors"
                       >
-                        Reject
+                        {actioningHelperId === helper._id ? 'Rejecting…' : 'Reject'}
                       </button>
                     </div>
                   )}
@@ -226,9 +258,9 @@ const HelpPostCard = ({
           <div className="flex space-x-2 mt-4">
             {post.status !== 'completed' && (
               <select
+                value={post.status || 'open'}
                 onChange={(e) => onUpdateStatus(post._id, e.target.value)}
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                defaultValue={post.status || 'open'}
               >
                 <option value="open">Open</option>
                 <option value="in-progress">In Progress</option>
